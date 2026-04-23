@@ -1,6 +1,8 @@
 # numerics-sundials
 
-TODO: Describe what this package does.
+[![Docs](https://img.shields.io/badge/docs-online-blue)](https://cmsd2.github.io/maxima-numerics-sundials/)
+
+SUNDIALS CVODE integration for [maxima-numerics](https://github.com/cmsd2/maxima-numerics), providing production-grade ODE solving with event detection for Maxima.
 
 ## Install
 
