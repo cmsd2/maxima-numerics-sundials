@@ -1,0 +1,12 @@
+/* Test runner for numerics-sundials */
+
+(load("numerics"), true);
+true;
+
+(load("numerics-sundials"), true);
+true;
+
+(load("tests/test_helpers"), true);
+true;
+
+batch("tests/test_cvode.mac", test);

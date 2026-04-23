@@ -1,0 +1,18 @@
+/* numerics-sundials — SUNDIALS ODE/DAE solvers for Maxima numerics
+ *
+ * Provides:
+ *   np_cvode  — ODE integration via SUNDIALS CVODE (Adams/BDF, event detection)
+ *   np_dae    — DAE integration via SUNDIALS IDA
+ *
+ * Requires: numerics must be loaded first.
+ *           SUNDIALS C library must be installed on the system.
+ *
+ * Usage:
+ *   load("numerics")$
+ *   load("numerics-sundials")$
+ */
+
+if not fboundp('np_zeros) then
+  error("numerics-sundials requires numerics. Load it first: load(\"numerics\")$")$
+
+load("numerics-sundials-loader.lisp")$

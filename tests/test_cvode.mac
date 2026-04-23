@@ -1,0 +1,213 @@
+/* Tests for np_cvode — SUNDIALS CVODE ODE solver */
+
+/* Load packages */
+(load("numerics"), true);
+true;
+
+(load("numerics-sundials"), true);
+true;
+
+(load("tests/test_helpers"), true);
+true;
+
+/* === 1. Exponential decay (expression mode) === */
+/* dy/dt = -y, y(0) = 1 => y(t) = exp(-t) */
+(
+  cv_tspan : [0.0, 0.5, 1.0, 1.5, 2.0],
+  cv_res1 : np_cvode([-y1], [tt, y1], [1.0], cv_tspan),
+  true
+);
+true;
+
+/* Check shape */
+np_shape(cv_res1);
+[5, 2];
+
+/* Check time column */
+closeto(np_ref(cv_res1, 0, 0), 0.0);
+true;
+
+closeto(np_ref(cv_res1, 2, 0), 1.0);
+true;
+
+/* Check y(1.0) ≈ exp(-1) ≈ 0.3679 */
+closeto(np_ref(cv_res1, 2, 1), float(%e^(-1)), 1e-6);
+true;
+
+/* Check y(2.0) ≈ exp(-2) ≈ 0.1353 */
+closeto(np_ref(cv_res1, 4, 1), float(%e^(-2)), 1e-6);
+true;
+
+/* === 2. Harmonic oscillator (expression mode) === */
+/* dx/dt = v, dv/dt = -x, x(0)=1, v(0)=0 => x(t)=cos(t), v(t)=-sin(t) */
+(
+  cv_tspan2 : makelist(i*0.1, i, 0, 40),
+  cv_res2 : np_cvode([cv_v, -cv_x], [tt, cv_x, cv_v], [1.0, 0.0], cv_tspan2),
+  true
+);
+true;
+
+/* Shape: 41 times, 3 columns (t, x, v) */
+np_shape(cv_res2);
+[41, 3];
+
+/* x(pi) ≈ cos(pi) = -1 */
+closeto(np_ref(cv_res2, 31, 1), float(cos(3.1)), 0.01);
+true;
+
+/* === 3. Stiff system with BDF method === */
+/* dy/dt = -50*y, y(0) = 1 => y(t) = exp(-50*t) */
+(
+  cv_res3 : np_cvode([-50*y1], [tt, y1], [1.0],
+                      [0.0, 0.1, 0.5, 1.0], 1e-8, 1e-8, bdf),
+  true
+);
+true;
+
+closeto(np_ref(cv_res3, 1, 1), float(%e^(-5)), 1e-5);
+true;
+
+closeto(np_ref(cv_res3, 2, 1), float(%e^(-25)), 1e-5);
+true;
+
+/* === 4. Function mode — exponential decay === */
+(
+  cv_fn(cv_t, cv_y) := [-np_ref(cv_y, 0)],
+  cv_res4 : np_cvode(cv_fn, [1.0], [0.0, 0.5, 1.0, 1.5, 2.0]),
+  true
+);
+true;
+
+np_shape(cv_res4);
+[5, 2];
+
+closeto(np_ref(cv_res4, 2, 1), float(%e^(-1)), 1e-6);
+true;
+
+/* === 5. Function mode — harmonic oscillator === */
+(
+  cv_osc(cv_t, cv_y) := [np_ref(cv_y, 1), -np_ref(cv_y, 0)],
+  cv_res5 : np_cvode(cv_osc, [1.0, 0.0], makelist(i*0.1, i, 0, 40)),
+  true
+);
+true;
+
+np_shape(cv_res5);
+[41, 3];
+
+/* === 6. Function mode — lambda === */
+(
+  cv_res6 : np_cvode(lambda([cv_t, cv_y], [-np_ref(cv_y, 0)]),
+                      [1.0], [0.0, 1.0]),
+  true
+);
+true;
+
+np_shape(cv_res6);
+[2, 2];
+
+closeto(np_ref(cv_res6, 1, 1), float(%e^(-1)), 1e-6);
+true;
+
+/* === 7. ndarray inputs for y0 and tspan === */
+(
+  cv_y0nd : ndarray([1.0]),
+  cv_tsnd : np_linspace(0.0, 1.0, 5),
+  cv_res7 : np_cvode([-y1], [tt, y1], cv_y0nd, cv_tsnd),
+  true
+);
+true;
+
+np_shape(cv_res7);
+[5, 2];
+
+/* === 8. BDF function mode === */
+(
+  cv_res8 : np_cvode(cv_fn, [1.0], [0.0, 0.1, 0.5, 1.0], 1e-8, 1e-8, bdf),
+  true
+);
+true;
+
+closeto(np_ref(cv_res8, 2, 1), float(%e^(-0.5)), 1e-6);
+true;
+
+/* === 9. Event detection: bouncing ball === */
+/* dy1/dt = y2, dy2/dt = -9.81 (free-fall)
+   Event: y1 = 0 (hits ground)
+   y1(0) = 10, y2(0) = 0 */
+(
+  cv_ball : np_cvode([cv_v, -9.81], [tt, cv_h, cv_v], [10.0, 0.0],
+                     makelist(i*0.1, i, 0, 30),
+                     1e-10, 1e-10, adams, [cv_h]),
+  true
+);
+true;
+
+/* Ball result is [trajectory, events_list] */
+is(listp(cv_ball));
+true;
+
+/* Trajectory is an ndarray */
+is(np_shape(first(cv_ball)) # false);
+true;
+
+/* At least one event detected (ground hit) */
+is(length(second(cv_ball)) > 0);
+true;
+
+/* First event: h=0, time ≈ sqrt(2*10/9.81) ≈ 1.4278 */
+(
+  cv_ev1 : first(second(cv_ball)),
+  closeto(first(cv_ev1), sqrt(2*10.0/9.81), 0.01)
+);
+true;
+
+/* Event index should be [0] (first event function) */
+third(cv_ev1);
+[0];
+
+/* === 10. Event detection: threshold crossing === */
+/* dy/dt = 1 (linear), event: y - 0.5 = 0 => t_event = 0.5 */
+(
+  cv_threshold : np_cvode([1.0], [tt, y1], [0.0],
+                          [0.0, 0.3, 0.7, 1.0],
+                          1e-10, 1e-10, adams, [y1 - 0.5]),
+  true
+);
+true;
+
+is(length(second(cv_threshold)) > 0);
+true;
+
+/* Event at t ≈ 0.5 */
+closeto(first(first(second(cv_threshold))), 0.5, 1e-6);
+true;
+
+/* === 11. Multiple events === */
+/* dy/dt = 1, events: [y - 0.3, y - 0.7] */
+(
+  cv_multi : np_cvode([1.0], [tt, y1], [0.0],
+                      [0.0, 0.5, 1.0],
+                      1e-10, 1e-10, adams, [y1 - 0.3, y1 - 0.7]),
+  true
+);
+true;
+
+/* Should have 2 events */
+is(length(second(cv_multi)) >= 2);
+true;
+
+/* First event at t ≈ 0.3 (index 0), second at t ≈ 0.7 (index 1) */
+closeto(first(first(second(cv_multi))), 0.3, 1e-6);
+true;
+
+closeto(first(second(second(cv_multi))), 0.7, 1e-6);
+true;
+
+/* === 12. Error: wrong y0 dimension === */
+errcatch(np_cvode([-y1, -y2], [tt, y1, y2], [1.0], [0.0, 1.0]));
+[];
+
+/* === 13. Error: invalid method === */
+errcatch(np_cvode([-y1], [tt, y1], [1.0], [0.0, 1.0], 1e-8, 1e-8, rk45));
+[];

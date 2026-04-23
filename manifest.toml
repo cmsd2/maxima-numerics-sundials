@@ -1,0 +1,17 @@
+[package]
+name = "numerics-sundials"
+version = "0.1.0"
+description = "SUNDIALS ODE/DAE solvers for Maxima numerics"
+license = "MIT"
+entry = "numerics-sundials.mac"
+doc = "doc/numerics-sundials.md"
+keywords = ["ode", "dae", "sundials", "cvode", "ida"]
+
+[dependencies]
+numerics = ">= 0.1.0"
+
+[lisp]
+quicklisp_systems = ["cffi", "trivial-garbage", "alexandria"]
+
+[test]
+files = ["tests/test_cvode.mac"]

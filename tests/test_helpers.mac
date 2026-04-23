@@ -1,0 +1,7 @@
+/* Shared test helpers for numerics-sundials test suite */
+
+closeto([args]) := block([a, b, tol],
+  a : args[1], b : args[2],
+  tol : if length(args) >= 3 then args[3] else 1e-10,
+  is(abs(a - b) < tol)) $
+list_closeto(L1, L2) := is(lmax(map(lambda([a,b], abs(a-b)), L1, L2)) < 1e-10) $
