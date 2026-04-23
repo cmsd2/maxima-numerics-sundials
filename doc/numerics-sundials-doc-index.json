@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "package": "numerics-sundials",
+  "source": "./doc/numerics-sundials.md",
+  "symbols": {
+    "numerics_sundials_hello": {
+      "type": "Function",
+      "signature": "numerics_sundials_hello()",
+      "summary": "TODO: describe this function.",
+      "body_md": "TODO: describe this function.",
+      "examples": [],
+      "see_also": [],
+      "section": "Definitions for numerics-sundials"
+    }
+  },
+  "sections": [
+    {
+      "title": "Introduction to numerics-sundials",
+      "body_md": "TODO: describe numerics-sundials.\n\nTo use the package:\n\n```\nload(\"numerics-sundials\");\n```"
+    },
+    {
+      "title": "Definitions for numerics-sundials",
+      "body_md": ""
+    }
+  ]
+}
