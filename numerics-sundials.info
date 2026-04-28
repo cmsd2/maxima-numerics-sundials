@@ -1,4 +1,4 @@
-This is numerics-sundials.info, produced by makeinfo version 7.1 from
+This is numerics-sundials.info, produced by makeinfo version 7.3 from
 numerics-sundials.texi.
 
 
@@ -246,30 +246,19 @@ Appendix A Function and variable index
 * np_cvode <3>:                          Function np_cvode f_func y0 tspan rtol atol method max_steps.
                                                                 (line 3)
 
-
 
 Tag Table:
 Node: Top95
 Node: Package numerics-sundials234
-Ref: #package-numerics-sundials415
 Node: Introduction480
-Ref: #introduction642
 Node: Prerequisites1243
-Ref: #prerequisites1373
 Node: Loading1570
-Ref: #loading1688
 Node: Definitions for numerics-sundials1746
-Ref: #definitions-for-numerics-sundials1950
 Node: Function np_cvode f vars y0 tspan2173
-Ref: #function-np_cvode-f-vars-y0-tspan2407
 Node: Function np_cvode f vars y0 tspan rtol atol method events max_steps2408
-Ref: #function-np_cvode-f-vars-y0-tspan-rtol-atol-method-events-max_steps2733
 Node: Function np_cvode f_func y0 tspan2734
-Ref: #function-np_cvode-f_func-y0-tspan3036
 Node: Function np_cvode f_func y0 tspan rtol atol method max_steps3037
-Ref: #function-np_cvode-f_func-y0-tspan-rtol-atol-method-max_steps3304
 Node: Examples5397
-Ref: #examples5517
 Node: Function and variable index8120
 
 End Tag Table

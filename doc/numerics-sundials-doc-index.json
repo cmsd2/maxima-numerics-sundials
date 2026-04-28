@@ -1,7 +1,7 @@
 {
   "version": 1,
   "package": "numerics-sundials",
-  "source": "./doc/numerics-sundials.md",
+  "source": "doc/numerics-sundials.md",
   "symbols": {
     "np_cvode": {
       "type": "Function",
