@@ -32,6 +32,10 @@
   (cvode-mem :pointer)
   (mxsteps :long))
 
+(cffi:defcfun ("CVodeSetInitStep" %cvode-set-init-step) :int
+  (cvode-mem :pointer)
+  (hin sunrealtype))           ; initial step size (0 = let CVODE choose)
+
 ;;; --- Rootfinding (event detection) ---
 
 (cffi:defcfun ("CVodeRootInit" %cvode-root-init) :int

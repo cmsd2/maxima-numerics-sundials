@@ -209,6 +209,21 @@
           (%cvode-set-user-data cvode-mem (cffi:make-pointer rhs-key))
           ;; Set max steps
           (%cvode-set-max-num-steps cvode-mem max-steps)
+          ;; Set a sensible initial step size.
+          ;; SUNDIALS' default init-step heuristic divides by ||f(t0, y0)||
+          ;; — so it triggers DIV-BY-ZERO whenever the RHS evaluates to
+          ;; zero at the start (e.g. dy/dt = t with t0 = 0, dy/dt = 0
+          ;; identically, or any model that starts at an instantaneous
+          ;; equilibrium of its drift term).  Picking ~1/1000 of the
+          ;; first output interval works for any reasonable problem
+          ;; (CVODE adapts away from it within the first step or two).
+          (let ((h0 (when (>= (length t-list) 2)
+                      (* 1.0d-3 (- (coerce (second t-list) 'double-float)
+                                   (coerce (first  t-list) 'double-float))))))
+            (when (and h0 (> h0 0.0d0))
+              (sundials-check-flag
+                (%cvode-set-init-step cvode-mem h0)
+                "CVodeSetInitStep")))
           ;; Set up event detection if requested.
           ;; SUNDIALS uses the same user_data pointer for both RHS and root
           ;; callbacks. Our root trampoline looks up in *cvode-root-table*
