@@ -1,4 +1,4 @@
-This is numerics-sundials.info, produced by makeinfo version 7.3 from
+This is numerics-sundials.info, produced by makeinfo version 7.1 from
 numerics-sundials.texi.
 
 
@@ -200,44 +200,72 @@ on every segment, even though only the initial state changes between
 them.  SUNDIALS' ‘CVodeReInit’ is designed for exactly this -- keep the
 integrator alive, just reset the IC. The stateful API exposes it:
 
-handle : np_cvode_create(f, vars, y0, t0, rtol, atol, method, events, max_steps, rootdir)$
-[t_actual, y_state, events_during_step] : np_cvode_step(handle, t_target)$
-np_cvode_reinit(handle, t_new, y_new)$
-[t2, y2, evs2] : np_cvode_step(handle, next_target)$
-np_cvode_close(handle)$
+h : np_cvode_create(f, vars, y0, t0, rtol, atol, method, events, max_steps, rootdir)$
 
-Each ‘np_cvode_step’ call advances the integrator from its current
-internal state up to ‘t_target’, collecting any events along the way.
+[t1, y_at_t1, evs] : np_cvode_step(h, target_1)$
+np_cvode_reinit(h, t1, post_event_state)$
+[t2, y_at_t2, evs2] : np_cvode_step(h, target_2)$
+/* ...keep going as long as you like... */
+
+Each ‘np_cvode_step’ advances the integrator from its current internal
+state to ‘t_target’, collecting any events along the way.
 ‘np_cvode_reinit’ discards the multistep history (correct after a
 discrete state change) and resets the IC without rebuilding the linear
-solver or reregistering events.
+solver or re-registering events.
 
-Resource lifecycle is two-tiered:
+Returned shapes:
 
-   • *Explicit close* (‘np_cvode_close’) -- frees the foreign resources
-     immediately.  Recommended for hot loops or long-lived sessions.
-   • *GC fallback* -- every handle returned by ‘np_cvode_create’ is
-     wrapped in a struct with a finalizer registered via
-     ‘trivial-garbage’.  If the user drops the reference without calling
-     ‘np_cvode_close’, the finalizer runs at the next full GC and
-     reclaims the resources.  Idempotent with explicit close, so calling
-     close + later GC is safe.
-   • *‘np_cvode_with_handle’* -- the canonical resource-safe pattern.
-     Wraps ‘create + body + close’ in Common Lisp's ‘unwind-protect’, so
-     the handle is always closed even if ‘body’ errors.  Maxima's own
-     ‘unwind_protect’ has historically been unreliable for this; the
-     wrapper sidesteps that.
+   • ‘np_cvode_step(h, t)’ returns ‘[t_actual, [y...], events_list]’
+     where ‘events_list’ follows the same ‘[t_event, [y...], [indices],
+     [directions]]’ shape as ‘np_cvode’'s events list.  If no event
+     fires, ‘events_list’ is empty.
+   • ‘np_cvode_reinit’ and ‘np_cvode_close’ return ‘done’.
 
-result : np_cvode_with_handle(
-  [f, vars, y0, t0, rtol, atol, method, events, max_steps, rootdir],
-  lambda([h],
-    /* use h freely; do whatever */
-    final_value))$
-/* h is closed by the time we get here, success or failure */
+Resource lifecycle For typical notebook use you can *ignore this
+entirely* -- create handles, use them, let the session end.  Memory will
+be reclaimed.
 
-‘np_cvode_step’ returns ‘[t_actual, [y...], events_list]’ where
-‘events_list’ has the same shape as the events list returned by
-‘np_cvode’ (entries of ‘[t_event, [y...], [indices], [directions]]’).
+Two slightly subtle situations to know about:
+
+  1. *A loop inside one cell* (‘for i thru N do (h : create(...))’) --
+     old handles are _not_ anchored by Maxima's output history (the
+     for-loop body's intermediate values don't get ‘%o’ labels), so as
+     soon as ‘h’ is rebound the old handle is unreachable and the next
+     GC reclaims it.  Tested with N = 1000 -- bounded memory.
+
+  2. *Each cell rebinds to a new handle on a separate top-level line* --
+     Maxima assigns ‘%o<N>’ to each cell's result, including the handle
+     form.  Even when you rebind the variable, ‘%o<N>’ still references
+     the old handle, so it stays alive.  Each cell adds one handle worth
+     of state (a few kB to tens of kB). For a notebook with hundreds of
+     such cells the total is still typically modest, but if you're
+     explicitly worried, ‘kill(labels)$’ clears the ‘%o’ history and
+     lets the orphaned handles be reclaimed.
+
+Two affordances exist for cases where the defaults aren't enough:
+
+   • *‘np_cvode_close(handle)’* -- frees the foreign resources
+     immediately.  Useful in tight loops where you want determinism
+     rather than GC timing, or if a single handle is huge (very many
+     states).
+
+   • *‘np_cvode_with_handle(create_args, body_fn)’* -- ‘create + body +
+     close’ wrapped in Common Lisp's ‘unwind-protect’, so the handle is
+     closed even if ‘body_fn’ errors.  Maxima's own ‘unwind_protect’ has
+     historically been unreliable about running its cleanup form on
+     error, hence the Lisp-level implementation.
+
+     result : np_cvode_with_handle(
+       [f, vars, y0, t0, rtol, atol, method, events, max_steps, rootdir],
+       lambda([h],
+         /* use h freely; can error */
+         final_value))$
+     /* h is closed by the time we get here — success or failure */
+
+For everyone else: just don't call close.  The handle will be reclaimed
+eventually -- at the next full GC if you were rebinding inside a loop,
+or at session end if you were assigning across cells.  Forgotten handles
+in a typical interactive session amount to single-digit MB at most.
 
 * Menu:
 
@@ -351,26 +379,43 @@ Appendix A Function and variable index
 * np_cvode_with_handle:                  Function np_cvode_with_handle create_args body_fn.
                                                                 (line 3)
 
+
 
 Tag Table:
 Node: Top95
 Node: Package numerics-sundials234
+Ref: #package-numerics-sundials415
 Node: Introduction480
+Ref: #introduction642
 Node: Prerequisites1243
+Ref: #prerequisites1373
 Node: Loading1570
+Ref: #loading1688
 Node: Definitions for numerics-sundials1746
+Ref: #definitions-for-numerics-sundials1950
 Node: Function np_cvode f vars y0 tspan2407
+Ref: #function-np_cvode-f-vars-y0-tspan2649
 Node: Function np_cvode f vars y0 tspan rtol atol method events max_steps rootdir2650
+Ref: #function-np_cvode-f-vars-y0-tspan-rtol-atol-method-events-max_steps-rootdir2992
 Node: Function np_cvode f_func y0 tspan2993
+Ref: #function-np_cvode-f_func-y0-tspan3303
 Node: Function np_cvode f_func y0 tspan rtol atol method max_steps3304
+Ref: #function-np_cvode-f_func-y0-tspan-rtol-atol-method-max_steps3621
 Node: Function np_cvode_create f vars y0 t0 ...3622
+Ref: #function-np_cvode_create-f-vars-y0-t03913
 Node: Function np_cvode_step handle t_target3914
+Ref: #function-np_cvode_step-handle-t_target4182
 Node: Function np_cvode_reinit handle t_new y_new4183
+Ref: #function-np_cvode_reinit-handle-t_new-y_new4446
 Node: Function np_cvode_close handle4447
+Ref: #function-np_cvode_close-handle4706
 Node: Function np_cvode_with_handle create_args body_fn4707
+Ref: #function-np_cvode_with_handle-create_args-body_fn4934
 Node: Stateful API persistent CVODE handles7708
-Node: Examples10319
-Node: Function and variable index13050
+Ref: #stateful-api-persistent-cvode-handles7917
+Node: Examples11624
+Ref: #examples11752
+Node: Function and variable index14355
 
 End Tag Table
 
