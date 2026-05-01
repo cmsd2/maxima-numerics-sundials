@@ -78,31 +78,61 @@ File: numerics-sundials.info,  Node: Definitions for numerics-sundials,  Prev: I
 * Menu:
 
 * Function np_cvode f vars y0 tspan::
-* Function np_cvode f vars y0 tspan rtol atol method events max_steps::
+* Function np_cvode f vars y0 tspan rtol atol method events max_steps rootdir::
 * Function np_cvode f_func y0 tspan::
 * Function np_cvode f_func y0 tspan rtol atol method max_steps::
+* Function np_cvode_create f vars y0 t0 ...::
+* Function np_cvode_step handle t_target::
+* Function np_cvode_reinit handle t_new y_new::
+* Function np_cvode_close handle::
+* Function np_cvode_with_handle create_args body_fn::
 
 
-File: numerics-sundials.info,  Node: Function np_cvode f vars y0 tspan,  Next: Function np_cvode f vars y0 tspan rtol atol method events max_steps,  Up: Definitions for numerics-sundials
+File: numerics-sundials.info,  Node: Function np_cvode f vars y0 tspan,  Next: Function np_cvode f vars y0 tspan rtol atol method events max_steps rootdir,  Up: Definitions for numerics-sundials
 
  -- Function: np_cvode (F, VARS, Y0, TSPAN)
 
 
-File: numerics-sundials.info,  Node: Function np_cvode f vars y0 tspan rtol atol method events max_steps,  Next: Function np_cvode f_func y0 tspan,  Prev: Function np_cvode f vars y0 tspan,  Up: Definitions for numerics-sundials
+File: numerics-sundials.info,  Node: Function np_cvode f vars y0 tspan rtol atol method events max_steps rootdir,  Next: Function np_cvode f_func y0 tspan,  Prev: Function np_cvode f vars y0 tspan,  Up: Definitions for numerics-sundials
 
  -- Function: np_cvode (F, VARS, Y0, TSPAN, RTOL, ATOL, METHOD, EVENTS,
-          MAX_STEPS)
+          MAX_STEPS, ROOTDIR)
 
 
-File: numerics-sundials.info,  Node: Function np_cvode f_func y0 tspan,  Next: Function np_cvode f_func y0 tspan rtol atol method max_steps,  Prev: Function np_cvode f vars y0 tspan rtol atol method events max_steps,  Up: Definitions for numerics-sundials
+File: numerics-sundials.info,  Node: Function np_cvode f_func y0 tspan,  Next: Function np_cvode f_func y0 tspan rtol atol method max_steps,  Prev: Function np_cvode f vars y0 tspan rtol atol method events max_steps rootdir,  Up: Definitions for numerics-sundials
 
  -- Function: np_cvode (F_FUNC, Y0, TSPAN)
 
 
-File: numerics-sundials.info,  Node: Function np_cvode f_func y0 tspan rtol atol method max_steps,  Prev: Function np_cvode f_func y0 tspan,  Up: Definitions for numerics-sundials
+File: numerics-sundials.info,  Node: Function np_cvode f_func y0 tspan rtol atol method max_steps,  Next: Function np_cvode_create f vars y0 t0 ...,  Prev: Function np_cvode f_func y0 tspan,  Up: Definitions for numerics-sundials
 
  -- Function: np_cvode (F_FUNC, Y0, TSPAN, RTOL, ATOL, METHOD,
           MAX_STEPS)
+
+
+File: numerics-sundials.info,  Node: Function np_cvode_create f vars y0 t0 ...,  Next: Function np_cvode_step handle t_target,  Prev: Function np_cvode f_func y0 tspan rtol atol method max_steps,  Up: Definitions for numerics-sundials
+
+ -- Function: np_cvode_create (F, VARS, Y0, T0, ...)
+
+
+File: numerics-sundials.info,  Node: Function np_cvode_step handle t_target,  Next: Function np_cvode_reinit handle t_new y_new,  Prev: Function np_cvode_create f vars y0 t0 ...,  Up: Definitions for numerics-sundials
+
+ -- Function: np_cvode_step (HANDLE, T_TARGET)
+
+
+File: numerics-sundials.info,  Node: Function np_cvode_reinit handle t_new y_new,  Next: Function np_cvode_close handle,  Prev: Function np_cvode_step handle t_target,  Up: Definitions for numerics-sundials
+
+ -- Function: np_cvode_reinit (HANDLE, T_NEW, Y_NEW)
+
+
+File: numerics-sundials.info,  Node: Function np_cvode_close handle,  Next: Function np_cvode_with_handle create_args body_fn,  Prev: Function np_cvode_reinit handle t_new y_new,  Up: Definitions for numerics-sundials
+
+ -- Function: np_cvode_close (HANDLE)
+
+
+File: numerics-sundials.info,  Node: Function np_cvode_with_handle create_args body_fn,  Prev: Function np_cvode_close handle,  Up: Definitions for numerics-sundials
+
+ -- Function: np_cvode_with_handle (CREATE_ARGS, BODY_FN)
      Integrate a system of ODEs ‘dy/dt = f(t, y)’ using the SUNDIALS
      CVODE solver.  Supports two calling conventions:
 
@@ -126,7 +156,14 @@ File: numerics-sundials.info,  Node: Function np_cvode f_func y0 tspan rtol atol
      *Event detection (expression mode only):* - ‘events’ -- ‘[g1, g2,
      ...]’ list of event expressions in the same variables as ‘f’.  The
      solver detects zero crossings of each ‘g_i(t, y)’ during
-     integration.
+     integration.  - ‘rootdir’ -- optional list of ‘-1’, ‘0’, ‘+1’ (one
+     per event) selecting the crossing direction CVODE should detect.
+     ‘-1’ means "falling crossings only" (‘g_i’ goes from positive to
+     negative), ‘+1’ means "rising only", ‘0’ (the default) detects
+     either direction.  Lets you suppress a class of spurious events
+     without filtering in user code -- the natural fix for the
+     bouncing-ball-style "post-reset state sits exactly on the boundary"
+     problem.
 
      *Returns:*
 
@@ -136,23 +173,81 @@ File: numerics-sundials.info,  Node: Function np_cvode f_func y0 tspan rtol atol
 
      With events: a Maxima list ‘[trajectory, events_list]’ where: -
      ‘trajectory’ is the 2D ndarray as above - ‘events_list’ is a list
-     of ‘[t_event, [y1, ..., yn], [idx1, ...]]’ entries, one per
-     detected zero crossing.  Each entry contains the event time, the
-     state at that time, and the indices (0-based) of the event
-     expressions that triggered.
+     of ‘[t_event, [y1, ..., yn], [idx1, ...], [dir1, ...]]’ entries,
+     one per detected zero crossing.  Each entry contains the event
+     time, the state at that time, the indices (0-based) of the event
+     expressions that triggered, and the direction (‘+1’ rising, ‘-1’
+     falling) of each fired root in the same order as the indices.
 
      If events are requested but none are detected, ‘events_list’ is
      empty: ‘[trajectory, []]’.
 
 * Menu:
 
+     * Stateful API persistent CVODE handles::
      * Examples::
 
 
-File: numerics-sundials.info,  Node: Examples,  Up: Definitions for numerics-sundials
+File: numerics-sundials.info,  Node: Stateful API persistent CVODE handles,  Up: Definitions for numerics-sundials
 
-1.2.1 Examples
---------------
+1.2.1 Stateful API: persistent CVODE handles
+--------------------------------------------
+
+‘np_cvode’ is single-shot -- every call builds a fresh ‘cvode_mem’,
+integrates, and tears down.  For event-driven loops (bouncing ball,
+switched dynamics, hybrid controllers) the consumer pays the setup cost
+on every segment, even though only the initial state changes between
+them.  SUNDIALS' ‘CVodeReInit’ is designed for exactly this -- keep the
+integrator alive, just reset the IC. The stateful API exposes it:
+
+handle : np_cvode_create(f, vars, y0, t0, rtol, atol, method, events, max_steps, rootdir)$
+[t_actual, y_state, events_during_step] : np_cvode_step(handle, t_target)$
+np_cvode_reinit(handle, t_new, y_new)$
+[t2, y2, evs2] : np_cvode_step(handle, next_target)$
+np_cvode_close(handle)$
+
+Each ‘np_cvode_step’ call advances the integrator from its current
+internal state up to ‘t_target’, collecting any events along the way.
+‘np_cvode_reinit’ discards the multistep history (correct after a
+discrete state change) and resets the IC without rebuilding the linear
+solver or reregistering events.
+
+Resource lifecycle is two-tiered:
+
+   • *Explicit close* (‘np_cvode_close’) -- frees the foreign resources
+     immediately.  Recommended for hot loops or long-lived sessions.
+   • *GC fallback* -- every handle returned by ‘np_cvode_create’ is
+     wrapped in a struct with a finalizer registered via
+     ‘trivial-garbage’.  If the user drops the reference without calling
+     ‘np_cvode_close’, the finalizer runs at the next full GC and
+     reclaims the resources.  Idempotent with explicit close, so calling
+     close + later GC is safe.
+   • *‘np_cvode_with_handle’* -- the canonical resource-safe pattern.
+     Wraps ‘create + body + close’ in Common Lisp's ‘unwind-protect’, so
+     the handle is always closed even if ‘body’ errors.  Maxima's own
+     ‘unwind_protect’ has historically been unreliable for this; the
+     wrapper sidesteps that.
+
+result : np_cvode_with_handle(
+  [f, vars, y0, t0, rtol, atol, method, events, max_steps, rootdir],
+  lambda([h],
+    /* use h freely; do whatever */
+    final_value))$
+/* h is closed by the time we get here, success or failure */
+
+‘np_cvode_step’ returns ‘[t_actual, [y...], events_list]’ where
+‘events_list’ has the same shape as the events list returned by
+‘np_cvode’ (entries of ‘[t_event, [y...], [indices], [directions]]’).
+
+* Menu:
+
+* Examples::
+
+
+File: numerics-sundials.info,  Node: Examples,  Up: Stateful API persistent CVODE handles
+
+1.2.1.1 Examples
+................
 
 Exponential decay ‘dy/dt = -y’, ‘y(0) = 1’ (exact solution: ‘y(t) =
 exp(-t)’):
@@ -239,11 +334,21 @@ Appendix A Function and variable index
 
 * np_cvode:                              Function np_cvode f vars y0 tspan.
                                                                 (line 3)
-* np_cvode <1>:                          Function np_cvode f vars y0 tspan rtol atol method events max_steps.
+* np_cvode <1>:                          Function np_cvode f vars y0 tspan rtol atol method events max_steps rootdir.
                                                                 (line 3)
 * np_cvode <2>:                          Function np_cvode f_func y0 tspan.
                                                                 (line 3)
 * np_cvode <3>:                          Function np_cvode f_func y0 tspan rtol atol method max_steps.
+                                                                (line 3)
+* np_cvode_close:                        Function np_cvode_close handle.
+                                                                (line 3)
+* np_cvode_create:                       Function np_cvode_create f vars y0 t0 ....
+                                                                (line 3)
+* np_cvode_reinit:                       Function np_cvode_reinit handle t_new y_new.
+                                                                (line 3)
+* np_cvode_step:                         Function np_cvode_step handle t_target.
+                                                                (line 3)
+* np_cvode_with_handle:                  Function np_cvode_with_handle create_args body_fn.
                                                                 (line 3)
 
 
@@ -254,12 +359,18 @@ Node: Introduction480
 Node: Prerequisites1243
 Node: Loading1570
 Node: Definitions for numerics-sundials1746
-Node: Function np_cvode f vars y0 tspan2173
-Node: Function np_cvode f vars y0 tspan rtol atol method events max_steps2408
-Node: Function np_cvode f_func y0 tspan2734
-Node: Function np_cvode f_func y0 tspan rtol atol method max_steps3037
-Node: Examples5397
-Node: Function and variable index8120
+Node: Function np_cvode f vars y0 tspan2407
+Node: Function np_cvode f vars y0 tspan rtol atol method events max_steps rootdir2650
+Node: Function np_cvode f_func y0 tspan2993
+Node: Function np_cvode f_func y0 tspan rtol atol method max_steps3304
+Node: Function np_cvode_create f vars y0 t0 ...3622
+Node: Function np_cvode_step handle t_target3914
+Node: Function np_cvode_reinit handle t_new y_new4183
+Node: Function np_cvode_close handle4447
+Node: Function np_cvode_with_handle create_args body_fn4707
+Node: Stateful API persistent CVODE handles7708
+Node: Examples10319
+Node: Function and variable index13050
 
 End Tag Table
 

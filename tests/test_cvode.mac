@@ -211,3 +211,175 @@ errcatch(np_cvode([-y1, -y2], [tt, y1, y2], [1.0], [0.0, 1.0]));
 /* === 13. Error: invalid method === */
 errcatch(np_cvode([-y1], [tt, y1], [1.0], [0.0, 1.0], 1e-8, 1e-8, rk45));
 [];
+
+/* === 14. Event direction info in returned tuples ===
+   y(t) = sin(t) crosses zero falling at t = π and rising at t = 2π.
+   Without a direction filter, both should be detected with the right
+   sign in the returned events list. */
+(
+  cv_sin : np_cvode([cos(tt)], [tt, y1], [0.0],
+                    [0.0, 7.0],
+                    1e-10, 1e-10, adams, [y1]),
+  cv_sin_evs : second(cv_sin),
+  true
+);
+true;
+
+/* Two events detected. */
+length(cv_sin_evs);
+2;
+
+/* First event at t ≈ π, falling (direction = -1). */
+closeto(first(first(cv_sin_evs)), float(%pi), 1e-6);
+true;
+
+fourth(first(cv_sin_evs));
+[-1];
+
+/* Second event at t ≈ 2π, rising (direction = +1). */
+closeto(first(second(cv_sin_evs)), float(2*%pi), 1e-6);
+true;
+
+fourth(second(cv_sin_evs));
+[1];
+
+/* === 15. rootdir filter: falling-only ===
+   Same problem but rootdir = [-1] should keep only the t = π crossing. */
+(
+  cv_sin_falling : np_cvode([cos(tt)], [tt, y1], [0.0],
+                            [0.0, 7.0],
+                            1e-10, 1e-10, adams,
+                            [y1], 5000, [-1]),
+  true
+);
+true;
+
+length(second(cv_sin_falling));
+1;
+
+closeto(first(first(second(cv_sin_falling))), float(%pi), 1e-6);
+true;
+
+/* === 16. rootdir filter: rising-only ===
+   rootdir = [+1] keeps only the t = 2π crossing. */
+(
+  cv_sin_rising : np_cvode([cos(tt)], [tt, y1], [0.0],
+                           [0.0, 7.0],
+                           1e-10, 1e-10, adams,
+                           [y1], 5000, [1]),
+  true
+);
+true;
+
+length(second(cv_sin_rising));
+1;
+
+closeto(first(first(second(cv_sin_rising))), float(2*%pi), 1e-6);
+true;
+
+/* === 17. rootdir validation === */
+/* rootdir length doesn't match number of events */
+errcatch(np_cvode([1.0], [tt, y1], [0.0], [0.0, 1.0],
+                  1e-8, 1e-8, adams, [y1 - 0.5], 5000, [-1, 0]));
+[];
+
+/* rootdir entry out of range */
+errcatch(np_cvode([1.0], [tt, y1], [0.0], [0.0, 1.0],
+                  1e-8, 1e-8, adams, [y1 - 0.5], 5000, [3]));
+[];
+
+/* === 18. Stateful API: create / step / reinit / close ===
+   Bouncing ball using np_cvode_create+step+reinit instead of
+   re-creating on each segment.  Reuses the same cvode_mem (and its
+   linear solver) across multiple integrations — what CVodeReInit is
+   for. */
+(
+  cv_h : np_cvode_create([y2, -9.81], [tt, y1, y2],
+                          [10.0, 0.0],
+                          0.0,
+                          1e-10, 1e-10, adams,
+                          [y1], 5000, [-1]),
+  true
+);
+true;
+
+/* First step: integrate forward to t=10.  An event should fire at
+   t ≈ sqrt(20/9.81) ≈ 1.428 (the first ground impact). */
+(cv_step1 : np_cvode_step(cv_h, 10.0), true);
+true;
+
+/* step result is a 3-element list [t, y_list, events_list]. */
+length(cv_step1);
+3;
+
+/* At least one event detected during the step. */
+is(length(cv_step1[3]) >= 1);
+true;
+
+/* First event is the ground hit. */
+(cv_first_ev : first(cv_step1[3]),
+ closeto(first(cv_first_ev), sqrt(2*10.0/9.81), 0.01));
+true;
+
+/* Reinit with the post-bounce state and verify another step works. */
+(np_cvode_reinit(cv_h, first(cv_first_ev),
+                  [0.0, -0.8 * second(cv_first_ev)[2]]),
+ true);
+true;
+
+(cv_step2 : np_cvode_step(cv_h, 10.0), true);
+true;
+
+/* Second step should detect bounce 2 too. */
+is(length(cv_step2[3]) >= 1);
+true;
+
+/* Close — frees SUNDIALS resources. */
+np_cvode_close(cv_h);
+done;
+
+/* Operating on a closed handle errors. */
+errcatch(np_cvode_step(cv_h, 1.0));
+[];
+
+/* === 19. np_cvode_with_handle: deterministic auto-close ===
+   Wraps create + body + close in unwind-protect.  Body should run,
+   handle should be freed afterwards. */
+(
+  cv_wh_result :
+    np_cvode_with_handle(
+      [[y2, -9.81], [tt, y1, y2], [10.0, 0.0], 0.0,
+       1e-10, 1e-10, adams, [y1], 5000, [-1]],
+      lambda([h], block([res],
+        res : np_cvode_step(h, 2.0),
+        first(res[3])[1]))),  /* return the bounce time */
+  true
+);
+true;
+
+/* The bounce time should be ≈ sqrt(20/9.81). */
+closeto(cv_wh_result, sqrt(2*10.0/9.81), 0.01);
+true;
+
+/* === 20. np_cvode_with_handle: cleanup on error ===
+   Body errors with `error(...)' — handle must still get closed.
+   We verify by stashing the handle in an outer variable, letting
+   the error propagate, and then trying to use the handle: it should
+   error because cleanup ran. */
+(cv_leaked_h : false, true);
+true;
+
+errcatch(
+  np_cvode_with_handle(
+    [[y2, -9.81], [tt, y1, y2], [10.0, 0.0], 0.0,
+     1e-10, 1e-10, adams, [y1]],
+    lambda([h],
+      cv_leaked_h : h,
+      np_cvode_step(h, 2.0),
+      error("intentional failure"))));
+[];
+
+/* Cleanup ran in unwind-protect → the stashed handle is now closed,
+   so any operation on it errors. */
+errcatch(np_cvode_step(cv_leaked_h, 1.0));
+[];

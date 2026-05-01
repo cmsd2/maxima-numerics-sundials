@@ -31,9 +31,14 @@ Windows: vcpkg install sundials
 ## Definitions for numerics-sundials
 
 ### Function: np_cvode (f, vars, y0, tspan)
-### Function: np_cvode (f, vars, y0, tspan, rtol, atol, method, events, max_steps)
+### Function: np_cvode (f, vars, y0, tspan, rtol, atol, method, events, max_steps, rootdir)
 ### Function: np_cvode (f_func, y0, tspan)
 ### Function: np_cvode (f_func, y0, tspan, rtol, atol, method, max_steps)
+### Function: np_cvode_create (f, vars, y0, t0, ...)
+### Function: np_cvode_step (handle, t_target)
+### Function: np_cvode_reinit (handle, t_new, y_new)
+### Function: np_cvode_close (handle)
+### Function: np_cvode_with_handle (create_args, body_fn)
 
 Integrate a system of ODEs `dy/dt = f(t, y)` using the SUNDIALS CVODE solver. Supports two calling conventions:
 
@@ -56,6 +61,7 @@ Integrate a system of ODEs `dy/dt = f(t, y)` using the SUNDIALS CVODE solver. Su
 
 **Event detection (expression mode only):**
 - `events` — `[g1, g2, ...]` list of event expressions in the same variables as `f`. The solver detects zero crossings of each `g_i(t, y)` during integration.
+- `rootdir` — optional list of `-1`, `0`, `+1` (one per event) selecting the crossing direction CVODE should detect. `-1` means "falling crossings only" (`g_i` goes from positive to negative), `+1` means "rising only", `0` (the default) detects either direction. Lets you suppress a class of spurious events without filtering in user code — the natural fix for the bouncing-ball-style "post-reset state sits exactly on the boundary" problem.
 
 **Returns:**
 
@@ -63,9 +69,55 @@ Without events: a 2D ndarray of shape `[n_times, 1 + neq]` where column 0 is tim
 
 With events: a Maxima list `[trajectory, events_list]` where:
 - `trajectory` is the 2D ndarray as above
-- `events_list` is a list of `[t_event, [y1, ..., yn], [idx1, ...]]` entries, one per detected zero crossing. Each entry contains the event time, the state at that time, and the indices (0-based) of the event expressions that triggered.
+- `events_list` is a list of `[t_event, [y1, ..., yn], [idx1, ...], [dir1, ...]]` entries, one per detected zero crossing. Each entry contains the event time, the state at that time, the indices (0-based) of the event expressions that triggered, and the direction (`+1` rising, `-1` falling) of each fired root in the same order as the indices.
 
 If events are requested but none are detected, `events_list` is empty: `[trajectory, []]`.
+
+#### Stateful API: persistent CVODE handles
+
+`np_cvode` is single-shot — every call builds a fresh `cvode_mem`, integrates, and tears down. For event-driven loops (bouncing ball, switched dynamics, hybrid controllers) the consumer pays the setup cost on every segment, even though only the initial state changes between them. SUNDIALS' `CVodeReInit` is designed for exactly this — keep the integrator alive, just reset the IC. The stateful API exposes it:
+
+```maxima
+h : np_cvode_create(f, vars, y0, t0, rtol, atol, method, events, max_steps, rootdir)$
+
+[t1, y_at_t1, evs] : np_cvode_step(h, target_1)$
+np_cvode_reinit(h, t1, post_event_state)$
+[t2, y_at_t2, evs2] : np_cvode_step(h, target_2)$
+/* ...keep going as long as you like... */
+```
+
+Each `np_cvode_step` advances the integrator from its current internal state to `t_target`, collecting any events along the way. `np_cvode_reinit` discards the multistep history (correct after a discrete state change) and resets the IC without rebuilding the linear solver or re-registering events.
+
+Returned shapes:
+
+- `np_cvode_step(h, t)` returns `[t_actual, [y...], events_list]` where `events_list` follows the same `[t_event, [y...], [indices], [directions]]` shape as `np_cvode`'s events list. If no event fires, `events_list` is empty.
+- `np_cvode_reinit` and `np_cvode_close` return `done`.
+
+##### Resource lifecycle
+
+For typical notebook use you can **ignore this entirely** — create handles, use them, let the session end. Memory will be reclaimed.
+
+Two slightly subtle situations to know about:
+
+1. **A loop inside one cell** (`for i thru N do (h : create(...))`) — old handles are *not* anchored by Maxima's output history (the for-loop body's intermediate values don't get `%o` labels), so as soon as `h` is rebound the old handle is unreachable and the next GC reclaims it. Tested with N = 1000 — bounded memory.
+
+2. **Each cell rebinds to a new handle on a separate top-level line** — Maxima assigns `%o<N>` to each cell's result, including the handle form. Even when you rebind the variable, `%o<N>` still references the old handle, so it stays alive. Each cell adds one handle worth of state (a few kB to tens of kB). For a notebook with hundreds of such cells the total is still typically modest, but if you're explicitly worried, `kill(labels)$` clears the `%o` history and lets the orphaned handles be reclaimed.
+
+Two affordances exist for cases where the defaults aren't enough:
+
+- **`np_cvode_close(handle)`** — frees the foreign resources immediately. Useful in tight loops where you want determinism rather than GC timing, or if a single handle is huge (very many states).
+- **`np_cvode_with_handle(create_args, body_fn)`** — `create + body + close` wrapped in Common Lisp's `unwind-protect`, so the handle is closed even if `body_fn` errors. Maxima's own `unwind_protect` has historically been unreliable about running its cleanup form on error, hence the Lisp-level implementation.
+
+  ```maxima
+  result : np_cvode_with_handle(
+    [f, vars, y0, t0, rtol, atol, method, events, max_steps, rootdir],
+    lambda([h],
+      /* use h freely; can error */
+      final_value))$
+  /* h is closed by the time we get here — success or failure */
+  ```
+
+For everyone else: just don't call close. The handle will be reclaimed eventually — at the next full GC if you were rebinding inside a loop, or at session end if you were assigning across cells. Forgotten handles in a typical interactive session amount to single-digit MB at most.
 
 #### Examples
 

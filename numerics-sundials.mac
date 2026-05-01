@@ -1,8 +1,17 @@
 /* numerics-sundials — SUNDIALS ODE/DAE solvers for Maxima numerics
  *
  * Provides:
- *   np_cvode  — ODE integration via SUNDIALS CVODE (Adams/BDF, event detection)
- *   np_dae    — DAE integration via SUNDIALS IDA
+ *   np_cvode              — ODE integration via SUNDIALS CVODE
+ *                           (Adams/BDF, event detection with direction filtering)
+ *   np_cvode_create       — persistent CVODE handle (for event-driven loops
+ *                           that benefit from CVodeReInit between segments)
+ *   np_cvode_step         — advance a persistent handle to a target time
+ *   np_cvode_reinit       — reset a handle's IC (CVodeReInit)
+ *   np_cvode_close        — free a handle's foreign resources
+ *   np_cvode_with_handle  — auto-closing wrapper: create + body + close
+ *                           in unwind_protect, the canonical resource-safe
+ *                           pattern for the persistent API
+ *   np_dae                — DAE integration via SUNDIALS IDA
  *
  * Requires: numerics must be loaded first.
  *           SUNDIALS C library must be installed on the system.
@@ -16,3 +25,35 @@ if not fboundp('np_zeros) then
   error("numerics-sundials requires numerics. Load it first: load(\"numerics\")$")$
 
 load("numerics-sundials-loader.lisp")$
+
+/* np_cvode_with_handle(create_args, body_fn) is implemented at the
+ * Lisp level (in cvode-wrapper.lisp) — Maxima's own unwind_protect
+ * has historically been unreliable about running its cleanup form on
+ * error, but Common Lisp's unwind-protect is solid, so we wrap there.
+ *
+ * Resource-safe wrapper around np_cvode_create + np_cvode_close.
+ * Builds a persistent CVODE handle, calls body_fn(handle), and closes
+ * the handle on the way out — including on error.
+ *
+ * Arguments:
+ *   create_args  — a Maxima list whose elements are passed positionally
+ *                  to np_cvode_create.  At minimum [f, vars, y0, t0];
+ *                  optional trailing args are rtol, atol, method,
+ *                  events, max_steps, rootdir.
+ *   body_fn      — a 1-argument lambda that does whatever you want with
+ *                  the handle (np_cvode_step / np_cvode_reinit / etc.).
+ *                  Its return value is the value of np_cvode_with_handle.
+ *
+ * Example: bouncing ball with auto-cleanup.
+ *
+ *   bounces : np_cvode_with_handle(
+ *     [[y2, -9.81], [t, y1, y2], [10.0, 0.0], 0.0,
+ *      1e-10, 1e-10, 'adams, [y1], 5000, [-1]],
+ *     lambda([h], block([events_collected : []],
+ *       for bounce : 1 thru 6 do block([res, ev],
+ *         res : np_cvode_step(h, 10.0),
+ *         if length(res[3]) = 0 then return(false),
+ *         ev : first(res[3]),
+ *         events_collected : endcons(ev, events_collected),
+ *         np_cvode_reinit(h, ev[1], [0.0, -0.8 * ev[2][2]])),
+ *       events_collected)))$ */

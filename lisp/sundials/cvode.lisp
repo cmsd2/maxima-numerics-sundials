@@ -45,7 +45,29 @@
 
 (cffi:defcfun ("CVodeGetRootInfo" %cvode-get-root-info) :int
   (cvode-mem :pointer)
-  (rootsfound :pointer))     ; int* array
+  (rootsfound :pointer))     ; int* array — sign indicates direction:
+                             ;   +1: rising crossing (g goes - → +)
+                             ;   -1: falling crossing (g goes + → -)
+                             ;    0: this root didn't fire
+
+(cffi:defcfun ("CVodeSetRootDirection" %cvode-set-root-direction) :int
+  (cvode-mem :pointer)
+  (rootdir   :pointer))      ; int* of length nrtfn — per-root filter:
+                             ;   +1: only detect rising crossings
+                             ;   -1: only detect falling crossings
+                             ;    0: detect any crossing (default)
+
+;;; --- Reinitialisation (after a discrete state change) ---
+
+(cffi:defcfun ("CVodeReInit" %cvode-reinit) :int
+  (cvode-mem :pointer)
+  (t0 sunrealtype)
+  (y0 n-vector))             ; reuse the same cvode-mem (and its
+                             ; linear solver) but with a new initial
+                             ; condition.  Multistep history is reset
+                             ; — appropriate after an event-triggered
+                             ; state reset (the trajectory is no longer
+                             ; smoothly continuous through t0).
 
 ;;; --- Stepping ---
 
