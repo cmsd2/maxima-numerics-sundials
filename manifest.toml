@@ -3,6 +3,7 @@ name = "numerics-sundials"
 version = "0.1.0"
 description = "SUNDIALS ODE/DAE solvers for Maxima numerics"
 license = "MIT"
+repository = "https://github.com/cmsd2/maxima-numerics-sundials"
 entry = "numerics-sundials.mac"
 doc = "doc/numerics-sundials.md"
 keywords = ["ode", "dae", "sundials", "cvode", "ida"]
