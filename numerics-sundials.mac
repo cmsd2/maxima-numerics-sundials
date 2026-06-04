@@ -21,7 +21,7 @@
  *   load("numerics-sundials")$
  */
 
-if not fboundp('np_zeros) then
+if ?fboundp(np_zeros) = false then
   error("numerics-sundials requires numerics. Load it first: load(\"numerics\")$")$
 
 load("numerics-sundials-loader.lisp")$
