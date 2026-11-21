@@ -1,4 +1,4 @@
-This is numerics-sundials.info, produced by makeinfo version 7.1 from
+This is numerics-sundials.info, produced by makeinfo version 7.2 from
 numerics-sundials.texi.
 
 
@@ -379,42 +379,25 @@ Appendix A Function and variable index
 * np_cvode_with_handle:                  Function np_cvode_with_handle create_args body_fn.
                                                                 (line 3)
 
-
 
 Tag Table:
 Node: Top95
 Node: Package numerics-sundials234
-Ref: #package-numerics-sundials415
 Node: Introduction480
-Ref: #introduction642
 Node: Prerequisites1243
-Ref: #prerequisites1373
 Node: Loading1570
-Ref: #loading1688
 Node: Definitions for numerics-sundials1746
-Ref: #definitions-for-numerics-sundials1950
 Node: Function np_cvode f vars y0 tspan2407
-Ref: #function-np_cvode-f-vars-y0-tspan2649
 Node: Function np_cvode f vars y0 tspan rtol atol method events max_steps rootdir2650
-Ref: #function-np_cvode-f-vars-y0-tspan-rtol-atol-method-events-max_steps-rootdir2992
 Node: Function np_cvode f_func y0 tspan2993
-Ref: #function-np_cvode-f_func-y0-tspan3303
 Node: Function np_cvode f_func y0 tspan rtol atol method max_steps3304
-Ref: #function-np_cvode-f_func-y0-tspan-rtol-atol-method-max_steps3621
 Node: Function np_cvode_create f vars y0 t0 ...3622
-Ref: #function-np_cvode_create-f-vars-y0-t03913
 Node: Function np_cvode_step handle t_target3914
-Ref: #function-np_cvode_step-handle-t_target4182
 Node: Function np_cvode_reinit handle t_new y_new4183
-Ref: #function-np_cvode_reinit-handle-t_new-y_new4446
 Node: Function np_cvode_close handle4447
-Ref: #function-np_cvode_close-handle4706
 Node: Function np_cvode_with_handle create_args body_fn4707
-Ref: #function-np_cvode_with_handle-create_args-body_fn4934
 Node: Stateful API persistent CVODE handles7708
-Ref: #stateful-api-persistent-cvode-handles7917
 Node: Examples11624
-Ref: #examples11752
 Node: Function and variable index14355
 
 End Tag Table
