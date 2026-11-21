@@ -2,7 +2,7 @@
 
 (defsystem "numerics-sundials"
   :description "SUNDIALS ODE/DAE solvers for Maxima numerics ndarrays"
-  :version "0.1.0"
+  :version "0.2.0"
   :license "MIT"
   :depends-on ("numerics/core" "cffi" "trivial-garbage" "alexandria")
   :serial t

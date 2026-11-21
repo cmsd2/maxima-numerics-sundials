@@ -1,6 +1,6 @@
 [package]
 name = "numerics-sundials"
-version = "0.1.0"
+version = "0.2.0"
 description = "SUNDIALS ODE/DAE solvers for Maxima numerics"
 license = "MIT"
 repository = "https://github.com/cmsd2/maxima-numerics-sundials"
@@ -9,7 +9,7 @@ doc = "doc/numerics-sundials.md"
 keywords = ["ode", "dae", "sundials", "cvode", "ida"]
 
 [dependencies]
-numerics = ">= 0.1.0"
+numerics = ">= 0.2.0"
 
 [lisp]
 quicklisp_systems = ["cffi", "trivial-garbage", "alexandria"]
