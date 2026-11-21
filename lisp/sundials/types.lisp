@@ -39,6 +39,13 @@
 (defconstant +cv-first-rhsfunc-err+ -9)
 (defconstant +cv-reptd-rhsfunc-err+ -10)
 (defconstant +cv-unrec-rhsfunc-err+ -11)
+(defconstant +cv-rtfunc-fail+ -12)
+(defconstant +cv-mem-fail+ -20)
+(defconstant +cv-mem-null+ -21)
+(defconstant +cv-ill-input+ -22)
+(defconstant +cv-no-malloc+ -23)
+(defconstant +cv-bad-t+ -25)
+(defconstant +cv-too-close+ -27)
 
 ;;; --- Error handling ---
 
@@ -56,6 +63,13 @@
     (-9 "first RHS evaluation failed (check initial conditions and RHS function)")
     (-10 "repeated RHS evaluation errors")
     (-11 "unrecoverable RHS function error")
+    (-12 "event (root) function evaluation failed")
+    (-20 "memory allocation failed")
+    (-21 "solver memory is missing")
+    (-22 "illegal input (see the SUNDIALS message above)")
+    (-23 "solver was not initialised")
+    (-25 "time is outside the last step taken")
+    (-27 "output time is too close to the start time")
     (otherwise (format nil "unknown error code ~A" flag))))
 
 (defun sundials-check-flag (flag context)

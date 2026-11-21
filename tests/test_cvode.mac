@@ -415,3 +415,52 @@ block([h : np_cvode_create([1.0], [tt, y1], [0.5], 0.5,
   np_cvode_close(h),
   [length(third(s1)), length(third(s2)), closeto(first(s2), 1.5, 1e-12)]);
 [1, 0, true];
+
+/* === 22. Function mode: f(t,y) of the wrong length ===
+   Too many derivatives used to be written past the end of CVODE's ydot
+   vector, and too few left the rest stale.  Both are errors now, whether
+   the length is wrong from the start or changes during integration. */
+errcatch(np_cvode(lambda([tt, yy], [1.0, 2.0]), [1.0], [0.0, 1.0]));
+[];
+
+errcatch(np_cvode(lambda([tt, yy], [1.0]), [1.0, 5.0], [0.0, 1.0]));
+[];
+
+errcatch(np_cvode(lambda([tt, yy], if tt > 0.5 then [1.0, 1.0] else [1.0]),
+                  [1.0], [0.0, 1.0]));
+[];
+
+/* A correct function still integrates after those errors. */
+closeto(np_ref(np_cvode(lambda([tt, yy], [-np_ref(yy, 0)]), [1.0], [0.0, 1.0]), 1, 1),
+        exp(-1.0), 1e-6);
+true;
+
+/* === 23. A root just after t0 that CVODE calls "at and very near" ===
+   x = 0.26554 at t = 0, moving down at 1.91, event at x = 0.2655164: the
+   root is at t = 1.46e-5.  The event function is still exactly 0 a tiny
+   step past it, so continuing returned CV_ILL_INPUT ("Root found at and
+   very near t") and np_cvode failed.  It now restarts CVODE at the root
+   and continues.  (SUNDIALS still prints its own [ERROR] line.)  This is
+   a case numerics-soak's cvode_multi_events found; all five crossings
+   of the four levels are reported. */
+(cv_r23 : np_cvode([fsv1,-(2.1661430664645116)*fsv0],[fst,fsv0,fsv1],ndarray([0.2655443514381704,-1.9144264134349986],[2]),ndarray([0.0,0.8632135929944126,1.7264271859888252,2.5896407789832376,3.4528543719776503],[5]),1e-11,1e-11,adams,[fsv0-(-0.796549274502523),fsv0-(-0.2655164248341743),fsv0-(0.26551642483417426),fsv0-(0.796549274502523)],100000,[0,-1,0,-1]), true);
+true;
+
+map(lambda([e], [third(e), fourth(e)]), second(cv_r23));
+[[[2], [-1]], [[1], [-1]], [[0], [-1]], [[0], [1]], [[2], [1]]];
+
+closeto(first(first(second(cv_r23))), 1.4587418994595055e-5, 1e-12);
+true;
+
+/* The same through the stateful API, with the first target just past
+   the root so the second np_cvode_step starts right after it. */
+block([h : np_cvode_create([fsv1, -(2.1661430664645116)*fsv0], [fst, fsv0, fsv1],
+                           [0.2655443514381704, -1.9144264134349986], 0.0,
+                           1e-11, 1e-11, adams,
+                           [fsv0 - 0.26551642483417426], 100000, [0]),
+       s1, s2],
+  s1 : np_cvode_step(h, 1.0e-4),
+  s2 : np_cvode_step(h, 3.0),
+  np_cvode_close(h),
+  [length(third(s1)), length(third(s2))]);
+[1, 1];

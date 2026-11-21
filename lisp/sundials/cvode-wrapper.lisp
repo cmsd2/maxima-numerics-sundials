@@ -81,6 +81,47 @@
             do (setf (cffi:mem-aref ydot-ptr :double i)
                      (coerce v 'double-float))))))
 
+(defun cvode-restart-after-root (cvode-mem y-nv last-root)
+  "Restart CVODE at LAST-ROOT, the (t . y) of the root it just returned.
+   When an event function is exactly 0 at that root and still 0 a tiny
+   step later (near t = 0 the step is ~1e-18, below the state's
+   resolution), CVODE refuses to continue: CV_ILL_INPUT, \"Root found at
+   and very near t\".  After CVodeReInit, a root that is 0 at the start
+   is instead marked inactive until it moves off 0, which is the
+   behaviour wanted."
+  (let ((y-ptr (%nv-get-array-pointer y-nv)))
+    (loop for v in (cdr last-root) for i from 0
+          do (setf (cffi:mem-aref y-ptr :double i) v)))
+  (sundials-check-flag (%cvode-reinit cvode-mem (car last-root) y-nv)
+                       "CVodeReInit"))
+
+(defun np-cvode-check-rhs-result (result neq)
+  "Signal a Maxima error unless RESULT, from f(t,y) in function mode, is a
+   list of NEQ derivatives.  Too many used to be written past the end of
+   CVODE's ydot vector; too few left the rest of ydot stale."
+  (unless (and (consp result) (eq (caar result) 'maxima::mlist))
+    (maxima::merror
+      "np_cvode: f(t,y) must return a list of derivatives, got: ~M"
+      result))
+  (unless (= (length (cdr result)) neq)
+    (maxima::merror "np_cvode: f(t,y) returned ~M derivatives for ~M states"
+                    (length (cdr result)) neq)))
+
+(defun np-cvode-check-rhs-fn (f-func t0 y0-list neq)
+  "Call F-FUNC once at T0 and Y0 and check what it returns, so a wrong
+   result raises an error before CVODE starts instead of inside its
+   callback."
+  (let* ((tensor (magicl:from-list (mapcar (lambda (v) (coerce v 'double-float)) y0-list)
+                                   (list neq) :type 'double-float
+                                   :layout :column-major))
+         (y (maxima::numerics-wrap (numerics:make-ndarray tensor)))
+         (t-val (coerce t0 'double-float)))
+    (np-cvode-check-rhs-result
+      (if (symbolp f-func)
+          (maxima::mfuncall f-func t-val y)
+          (maxima::mapply f-func (list t-val y) f-func))
+      neq)))
+
 (defun make-cvode-rhs-closure-fn (f-func neq)
   "Create a CVODE RHS closure from a Maxima callable.
    F-FUNC: Maxima function f(t, y) -> list of derivatives.
@@ -102,10 +143,7 @@
                         (maxima::mapply f-func
                                         (list t-val cb-wrapped)
                                         f-func))))
-        (unless (and (consp result) (eq (caar result) 'maxima::mlist))
-          (maxima::merror
-            "np_cvode: f(t,y) must return a list of derivatives, got: ~M"
-            result))
+        (np-cvode-check-rhs-result result neq)
         ;; Copy result into ydot N_Vector
         (let ((ydot-ptr (%nv-get-array-pointer ydot-nvec)))
           (loop for v in (cdr result) for i from 0
@@ -263,6 +301,7 @@
                          (nth j y0-list)))
           ;; Step through output times
           (cffi:with-foreign-object (tret :double)
+           (let ((last-root nil))       ; (t . y) of the root just returned
             (loop for idx from 1 below n-times
                   for tout-d = (coerce (nth idx t-list) 'double-float)
                   do (let ((keep-stepping t))
@@ -273,7 +312,12 @@
                            (cond
                              ;; Normal return — reached tout
                              ((= flag +cv-success+)
+                              (setf last-root nil)
                               (setf keep-stepping nil))
+                             ;; See cvode-restart-after-root
+                             ((and (= flag +cv-ill-input+) last-root)
+                              (cvode-restart-after-root cvode-mem y-nv last-root)
+                              (setf last-root nil))
                              ;; Root found — record event and continue.
                              ;; CVodeGetRootInfo returns +1/-1 per root
                              ;; that fired (sign of the crossing) and 0
@@ -300,6 +344,7 @@
                                                 (nreverse indices)
                                                 (nreverse dirs))
                                           events-collected)))
+                                (setf last-root (cons t-event y-event))
                                 ;; A root exactly at tout means CVODE has
                                 ;; reached tout.  Calling again returns the
                                 ;; same root without advancing (seen with
@@ -316,7 +361,7 @@
                          (loop for j from 0 below neq
                                do (setf (aref result-storage
                                               (+ idx (* (1+ j) n-times)))
-                                        (cffi:mem-aref y-ptr :double j)))))))
+                                        (cffi:mem-aref y-ptr :double j))))))))
           ;; Build return value
           (let ((traj (maxima::numerics-wrap
                         (numerics:make-ndarray result))))
@@ -434,6 +479,8 @@
          (rtol-d (coerce (maxima::$float rtol) 'double-float))
          (atol-d (coerce (maxima::$float atol) 'double-float))
          (rhs-closure (make-cvode-rhs-closure-fn f-func neq)))
+    (when t-list
+      (np-cvode-check-rhs-fn f-func (first t-list) y0-list neq))
     (np-cvode-core rhs-closure neq y0-list t-list lmm rtol-d atol-d
                     :max-steps max-steps)))
 
@@ -473,7 +520,8 @@
   neq
   nrtfn
   max-steps
-  has-events-p)
+  has-events-p
+  last-root)    ; (t . y) of the last root returned, for cvode-restart-after-root
 
 ;;; Two layers wrapping a CVODE handle:
 ;;;
@@ -625,11 +673,18 @@
                                      y-nv tret +cv-normal+)))
             (cond
               ((= flag +cv-success+)
+               (setf (cvode-handle-last-root h) nil)
                (setf t-actual (cffi:mem-ref tret :double))
                (setf keep-stepping nil))
+              ;; See cvode-restart-after-root.  The root can come from
+              ;; the previous np_cvode_step when it ended on one.
+              ((and (= flag +cv-ill-input+) (cvode-handle-last-root h))
+               (cvode-restart-after-root cvode-mem y-nv (cvode-handle-last-root h))
+               (setf (cvode-handle-last-root h) nil))
               ((= flag +cv-root-return+)
                (let ((t-event (cffi:mem-ref tret :double))
                      (y-event (nvector-to-list y-nv)))
+                 (setf (cvode-handle-last-root h) (cons t-event y-event))
                  (cffi:with-foreign-object (roots-found :int nrtfn)
                    (%cvode-get-root-info cvode-mem roots-found)
                    (let ((indices '())
@@ -770,6 +825,7 @@
         (coerce (maxima::$float t-new) 'double-float)
         y-nv)
       "CVodeReInit")
+    (setf (numerics-sundials::cvode-handle-last-root h) nil)
     '$done))
 
 (defun $np_cvode_close (handle)
