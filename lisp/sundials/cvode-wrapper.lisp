@@ -299,9 +299,14 @@
                                     (push (list t-event y-event
                                                 (nreverse indices)
                                                 (nreverse dirs))
-                                          events-collected))))
-                              ;; Continue stepping toward tout
-                              )
+                                          events-collected)))
+                                ;; A root exactly at tout means CVODE has
+                                ;; reached tout.  Calling again returns the
+                                ;; same root without advancing (seen with
+                                ;; no direction filter), so stop here.
+                                ;; Otherwise continue stepping toward tout.
+                                (when (>= t-event tout-d)
+                                  (setf keep-stepping nil))))
                              (t
                               (sundials-check-flag flag "CVode"))))))
                   ;; Store row
@@ -636,7 +641,13 @@
                              and do (push r dirs))
                      (push (list t-event y-event
                                  (nreverse indices) (nreverse dirs))
-                           events-collected)))))
+                           events-collected)))
+                 ;; A root exactly at t-target means CVODE has reached
+                 ;; it; calling again returns the same root without
+                 ;; advancing, so stop (see np_cvode).
+                 (when (>= t-event (coerce t-target 'double-float))
+                   (setf t-actual t-event)
+                   (setf keep-stepping nil))))
               (t
                (sundials-check-flag flag "CVode")))))))
     (values t-actual

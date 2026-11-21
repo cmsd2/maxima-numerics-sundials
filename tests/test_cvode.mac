@@ -383,3 +383,35 @@ errcatch(
    so any operation on it errors. */
 errcatch(np_cvode_step(cv_leaked_h, 1.0));
 [];
+
+/* === 21. Root exactly at an output time ===
+   dx/dt = 1 from x = 0.5 at t = 0.5, event x - 1: the root falls on
+   the output time t = 1.0.  With no direction filter CVODE kept
+   returning that root without advancing, and the event list grew
+   until the heap ran out.  The root is reported once, and the next
+   interval doesn't report it again. */
+(cv_r21 : np_cvode([1.0], [tt, y1], [0.5], [0.5, 1.0, 1.5],
+                   1e-8, 1e-8, adams, [y1 - 1.0]), true);
+true;
+
+length(second(cv_r21));
+1;
+
+closeto(first(first(second(cv_r21))), 1.0, 1e-12);
+true;
+
+closeto(np_ref(first(cv_r21), 2, 1), 1.5, 1e-10);
+true;
+
+/* The same with a direction filter of 0 and with the stateful API. */
+length(second(np_cvode([1.0], [tt, y1], [0.5], [0.5, 1.0],
+                       1e-8, 1e-8, adams, [y1 - 1.0], 5000, [0])));
+1;
+
+block([h : np_cvode_create([1.0], [tt, y1], [0.5], 0.5,
+                           1e-8, 1e-8, adams, [y1 - 1.0]), s1, s2],
+  s1 : np_cvode_step(h, 1.0),
+  s2 : np_cvode_step(h, 1.5),
+  np_cvode_close(h),
+  [length(third(s1)), length(third(s2)), closeto(first(s2), 1.5, 1e-12)]);
+[1, 0, true];
