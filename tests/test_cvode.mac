@@ -502,3 +502,47 @@ cv_has_rat(lambda([], block([h : np_cvode_create(cv_rhs, [tt, th, om],
                               np_cvode_step(h, 3.0),
                               np_cvode_close(h))));
 false;
+
+/* === Expression mode with many states ===
+   Maxima 5.50's coerce-float-fun compiled a lambda with one special
+   parameter per variable, and from 61 parameters SBCL's compiler failed
+   with "NIL is not of type SB-C:TN", so expression mode failed for 60 or
+   more states.  du_i/dt = -u_i gives u_i(1) = exp(-1) for every i. */
+(cv_decay(n) := block([us : makelist(concat(cv_u_, i), i, 1, n), r],
+   r : np_cvode(map("-", us), cons(tt, us), makelist(1.0, n),
+                np_linspace(0, 1, 11), 1e-10, 1e-10),
+   [np_shape(r), closeto(np_ref(r, 10, 1), exp(-1.0), 1e-7),
+    closeto(np_ref(r, 10, n), exp(-1.0), 1e-7)]),
+ true);
+true;
+
+cv_decay(60);
+[[11, 61], true, true];
+
+cv_decay(300);
+[[11, 301], true, true];
+
+/* Events take the same path: u_1 = 0.5 at t = log 2, with 80 states. */
+block([vs : makelist(concat(cv_v_, i), i, 1, 80), r],
+  r : np_cvode(map("-", vs), cons(tt, vs), makelist(1.0, 80),
+               np_linspace(0, 2, 21), 1e-10, 1e-10, adams, [vs[1] - 0.5]),
+  closeto(first(first(second(r))), log(2.0), 1e-7));
+true;
+
+/* Subscripted state variables, 70 of them; the caller's value of
+   cv_y[1] is restored afterwards. */
+block([ys : makelist(cv_y[i], i, 1, 70), r],
+  cv_y[1] : 99,
+  r : np_cvode(map("-", ys), cons(tt, ys), makelist(1.0, 70),
+               np_linspace(0, 1, 11), 1e-10, 1e-10),
+  [closeto(np_ref(r, 10, 1), exp(-1.0), 1e-7), cv_y[1]]);
+[true, 99];
+
+/* The stateful API, with 120 states. */
+block([ws : makelist(concat(cv_w_, i), i, 1, 120), h, s],
+  h : np_cvode_create(map("-", ws), cons(tt, ws), makelist(1.0, 120), 0.0),
+  s : np_cvode_step(h, 1.0),
+  np_cvode_close(h),
+  [closeto(first(s), 1.0, 1e-12), closeto(first(second(s)), exp(-1.0), 1e-7),
+   length(second(s))]);
+[true, true, 120];

@@ -66,9 +66,45 @@
 ;;; RHS closure builders
 ;;; ================================================================
 
+(defun np-cvode-expr-function (expr vars)
+  "Return a function of (t y1 ... yn) that evaluates the Maxima expression
+   EXPR with the variables in the Maxima list VARS bound to its arguments.
+   It returns what $float makes of the value, or T if evaluation fails.
+
+   This is what Maxima's coerce-float-fun does, without the compile.
+   Maxima 5.50 builds a lambda with one special parameter per variable and
+   compiles it, and from 61 parameters SBCL's compiler fails with \"NIL is
+   not of type SB-C:TN\", so systems of 60 or more states could not be
+   integrated.  That lambda only bound the variables and called MEVAL, so
+   binding them with PROGV costs the same."
+  (let* ((vs (cdr vars))
+         (subscripted (remove-if #'atom vs))
+         (symbols (remove-if-not #'atom vs)))
+    (flet ((evaluate ()
+             (let ((maxima::$ratprint nil)
+                   (maxima::$numer t)
+                   (maxima::*nounsflag* t))
+               (let ((r (maxima::errcatch
+                          (maxima::$float
+                           (maxima::maybe-realpart (maxima::meval expr))))))
+                 (if r (car r) t)))))
+      (if (null subscripted)
+          (lambda (&rest args)
+            (progv symbols args (evaluate)))
+          ;; A subscripted variable such as y[1] cannot be bound with
+          ;; PROGV, so it is MSET for the call and its old value restored.
+          (lambda (&rest args)
+            (let* ((saved (mapcar #'maxima::meval subscripted))
+                   (vals (loop for v in vs
+                               for a in args
+                               when (atom v) collect a
+                               else do (maxima::mset v a))))
+              (unwind-protect (progv symbols vals (evaluate))
+                (mapc #'maxima::mset subscripted saved))))))))
+
 (defun make-cvode-rhs-closure-expr (compiled-rhs neq)
   "Create a CVODE RHS closure from a compiled expression function.
-   COMPILED-RHS: compiled function from coerce-float-fun, taking (t, y1, ..., yn).
+   COMPILED-RHS: function from np-cvode-expr-function, taking (t, y1, ..., yn).
    Returns: closure (t-val y-nvec ydot-nvec) -> void."
   (lambda (t-val y-nvec ydot-nvec)
     (let* ((y-ptr (%nv-get-array-pointer y-nvec))
@@ -167,7 +203,7 @@
             do (let ((val (apply fn (coerce t-val 'double-float) y-list)))
                  (setf (cffi:mem-aref gout-ptr :double i)
                        (coerce (if (consp val)
-                                   ;; coerce-float-fun returns (mlist val)
+                                   ;; np-cvode-expr-function returns (mlist val)
                                    (cadr val)
                                    val)
                                'double-float)))))))
@@ -420,7 +456,7 @@
       (maxima::merror "np_cvode: ~A equations but y0 has ~A elements"
                       neq (length y0-list)))
     ;; Compile RHS
-    (let* ((compiled-rhs (compile nil (maxima::coerce-float-fun f vars)))
+    (let* ((compiled-rhs (np-cvode-expr-function f vars))
            (rhs-closure (make-cvode-rhs-closure-expr compiled-rhs neq))
            ;; Compile event functions if provided
            (nrtfn (if (and events (listp events)
@@ -432,10 +468,9 @@
                (let* ((event-exprs (cdr events))
                       (compiled-events
                         (mapcar (lambda (g-expr)
-                                  (compile nil
-                                    (maxima::coerce-float-fun
-                                      `((maxima::mlist) ,g-expr)
-                                      vars)))
+                                  (np-cvode-expr-function
+                                    `((maxima::mlist) ,g-expr)
+                                    vars))
                                 event-exprs)))
                  (make-cvode-event-closure-expr
                    compiled-events neq nrtfn)))))
@@ -746,7 +781,7 @@
       (unless (= neq (length y0-list))
         (merror "np_cvode_create: ~A equations but y0 has ~A elements"
                 neq (length y0-list)))
-      (let* ((compiled-rhs (compile nil (coerce-float-fun f vars)))
+      (let* ((compiled-rhs (numerics-sundials::np-cvode-expr-function f vars))
              (rhs-closure (numerics-sundials::make-cvode-rhs-closure-expr
                             compiled-rhs neq))
              (nrtfn (if (and events (listp events)
@@ -758,10 +793,9 @@
                  (let* ((event-exprs (cdr events))
                         (compiled-events
                           (mapcar (lambda (g-expr)
-                                    (compile nil
-                                      (coerce-float-fun
-                                        `((maxima::mlist) ,g-expr)
-                                        vars)))
+                                    (numerics-sundials::np-cvode-expr-function
+                                      `((maxima::mlist) ,g-expr)
+                                      vars))
                                   event-exprs)))
                    (numerics-sundials::make-cvode-event-closure-expr
                      compiled-events neq nrtfn))))
