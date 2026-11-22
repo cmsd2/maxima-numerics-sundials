@@ -464,3 +464,41 @@ block([h : np_cvode_create([fsv1, -(2.1661430664645116)*fsv0], [fst, fsv0, fsv1]
   np_cvode_close(h),
   [length(third(s1)), length(third(s2))]);
 [1, 1];
+
+/* === np_cvode prints no rat: lines ===
+   max and min with float constants make Maxima's simplifier print
+   "rat: replaced 5.0 by 5/1 = 5.0" while it builds the expression, so
+   build the right-hand side quietly and check that np_cvode itself
+   (compilation, events and the stateful API) adds none.  %pi keeps a
+   max/min argument symbolic until it is floated. */
+(cv_captured(f) := block([s : make_string_output_stream()],
+   with_stdout(s, f()),
+   get_output_stream_string(s)),
+ cv_has_rat(f) := is(ssearch("rat:", cv_captured(f)) # false),
+ ratprint : false,
+ cv_u : max(-5.0, min(5.0, 1.5*%pi*sin(th) + 0.5*cos(th) + 0.2*om)),
+ cv_rhs : [om, -9.81*sin(th) - 0.1*om + cv_u],
+ cv_ev : max(-1.0, min(1.0, 0.5*%pi*om)),
+ ratprint : true,
+ true);
+true;
+
+/* The capture sees rat lines, so the checks below can fail. */
+cv_has_rat(lambda([], max(-5.0, min(5.0, 1.5*th))));
+true;
+
+cv_has_rat(lambda([], np_cvode(cv_rhs, [tt, th, om], [float(%pi), 0.0],
+                               np_linspace(0, 6, 300), 1e-8, 1e-8)));
+false;
+
+cv_has_rat(lambda([], np_cvode(cv_rhs, [tt, th, om], [float(%pi), 0.0],
+                               np_linspace(0, 6, 50), 1e-8, 1e-8, bdf, [cv_ev])));
+false;
+
+cv_has_rat(lambda([], block([h : np_cvode_create(cv_rhs, [tt, th, om],
+                                                 [float(%pi), 0.0], 0.0,
+                                                 1e-8, 1e-8, adams, [cv_ev],
+                                                 5000, [0])],
+                              np_cvode_step(h, 3.0),
+                              np_cvode_close(h))));
+false;
